@@ -13,7 +13,6 @@ import numpy as np
 from .simulation import SimulationConfig, TrialResult, run_trial
 from .strategies import Strategy
 
-
 DEFAULT_STRATEGIES: tuple[Strategy, ...] = (
     Strategy.STATIC,
     Strategy.SINGLE_ROLLBACK,

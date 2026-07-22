@@ -66,8 +66,11 @@ def _local_states(
 def run_trial(
     strategy: Strategy,
     seed: int,
-    config: SimulationConfig = SimulationConfig(),
+    config: SimulationConfig | None = None,
 ) -> TrialResult:
+    if config is None:
+        config = SimulationConfig()
+
     if config.node_count != 8:
         raise ValueError("The current codebooks and graph require node_count=8")
 

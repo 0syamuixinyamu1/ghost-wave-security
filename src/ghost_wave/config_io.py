@@ -5,7 +5,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from .benchmark import BenchmarkConfig, DEFAULT_STRATEGIES
+from .benchmark import DEFAULT_STRATEGIES, BenchmarkConfig
 from .simulation import SimulationConfig
 from .strategies import Strategy
 

@@ -53,9 +53,11 @@ def choose_diverse_candidate(
     defender_estimate: np.ndarray,
     current_shell: np.ndarray,
     recent_shells: list[np.ndarray],
-    weights: CandidateScoreWeights = CandidateScoreWeights(),
+    weights: CandidateScoreWeights | None = None,
 ) -> np.ndarray:
     """Select a candidate without reading the attacker's hidden state."""
+    if weights is None:
+        weights = CandidateScoreWeights()
     # Codebook rows are normalized by construction. Normalize estimates once and
     # score all candidates with vectorized operations for reproducible speed.
     estimate = defender_estimate / (np.linalg.norm(defender_estimate) + 1e-12)
