@@ -1,0 +1,10 @@
+[benchmark]
+seeds = 1
+trials_per_seed = 5
+base_seed = 20260722
+output_directory = "."
+strategies = ["static", "single_rollback", "random_e8", "ghost_e8"]
+
+[simulation]
+steps = 30
+node_count = 8

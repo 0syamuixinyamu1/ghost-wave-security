@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+title: "Ghost Wave Security"
+message: "If you use this research prototype, please cite the software and the accompanying concept paper."
+type: software
+authors:
+  - family-names: "0syamunyamu1"
+version: 0.1.0
+date-released: 2026-07-22
+repository-code: "https://github.com/0syamuixinyamu1/ghost-wave-security"
+license: Apache-2.0
+keywords:
+  - cybersecurity
+  - moving target defense
+  - recovery diversity
+  - cellular sheaves
+  - E8 root system

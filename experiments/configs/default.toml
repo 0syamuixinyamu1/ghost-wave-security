@@ -1,0 +1,27 @@
+[benchmark]
+seeds = 3
+trials_per_seed = 40
+base_seed = 20260722
+output_directory = "."
+strategies = [
+  "static",
+  "single_rollback",
+  "random_e8",
+  "ghost_e8",
+  "ghost_d8",
+  "ghost_random"
+]
+
+[simulation]
+steps = 100
+node_count = 8
+recovery_threshold = 0.46
+recovery_cost = 2.5
+exposure_cost_per_compromised_service = 0.08
+core_hazard_scale = 0.008
+core_breach_penalty = 100.0
+attacker_adaptation = 0.10
+attacker_noise = 0.035
+defender_estimate_rate = 0.18
+defender_noise = 0.20
+lateral_movement_scale = 0.09

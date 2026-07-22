@@ -1,0 +1,177 @@
+"""Benchmark orchestration and output generation."""
+
+from __future__ import annotations
+
+import csv
+import math
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from .simulation import SimulationConfig, TrialResult, run_trial
+from .strategies import Strategy
+
+
+DEFAULT_STRATEGIES: tuple[Strategy, ...] = (
+    Strategy.STATIC,
+    Strategy.SINGLE_ROLLBACK,
+    Strategy.RANDOM_E8,
+    Strategy.GHOST_E8,
+    Strategy.GHOST_D8,
+    Strategy.GHOST_RANDOM,
+)
+
+
+@dataclass(frozen=True)
+class BenchmarkConfig:
+    seeds: int = 3
+    trials_per_seed: int = 40
+    base_seed: int = 20260722
+    output_directory: Path = Path(".")
+    simulation: SimulationConfig = SimulationConfig()
+    strategies: tuple[Strategy, ...] = DEFAULT_STRATEGIES
+
+
+def _mean_ci(values: list[float]) -> tuple[float, float]:
+    array = np.asarray(values, dtype=float)
+    mean = float(np.mean(array))
+    if len(array) < 2:
+        return mean, 0.0
+    sem = float(np.std(array, ddof=1) / math.sqrt(len(array)))
+    return mean, 1.96 * sem
+
+
+def summarize(results: list[TrialResult]) -> list[dict[str, float | str | int]]:
+    summaries: list[dict[str, float | str | int]] = []
+    for strategy in sorted({result.strategy for result in results}):
+        rows = [result for result in results if result.strategy == strategy]
+        summary: dict[str, float | str | int] = {"strategy": strategy, "n": len(rows)}
+        for field_name in (
+            "shell_compromise_rate",
+            "core_breached",
+            "recovery_downtime",
+            "compromise_exposure_cost",
+            "total_operational_cost",
+            "recovery_count",
+            "mean_collapse_index",
+            "reinfections",
+            "mean_gluing_inconsistency",
+        ):
+            mean, ci95 = _mean_ci([float(getattr(row, field_name)) for row in rows])
+            summary[f"{field_name}_mean"] = mean
+            summary[f"{field_name}_ci95"] = ci95
+        summaries.append(summary)
+    return summaries
+
+
+def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        raise ValueError("Cannot write an empty CSV")
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _write_figures(output: Path, summaries: list[dict[str, float | str | int]]) -> None:
+    figure_directory = output / "figures"
+    figure_directory.mkdir(parents=True, exist_ok=True)
+    labels = [str(row["strategy"]) for row in summaries]
+    compromise = [float(row["shell_compromise_rate_mean"]) for row in summaries]
+    core = [float(row["core_breached_mean"]) for row in summaries]
+    compromise_ci = [float(row["shell_compromise_rate_ci95"]) for row in summaries]
+    core_ci = [float(row["core_breached_ci95"]) for row in summaries]
+
+    positions = np.arange(len(labels))
+    width = 0.36
+    plt.figure(figsize=(9.0, 4.8))
+    plt.bar(
+        positions - width / 2,
+        compromise,
+        width,
+        yerr=compromise_ci,
+        capsize=3,
+        label="Shell compromise rate",
+    )
+    plt.bar(
+        positions + width / 2,
+        core,
+        width,
+        yerr=core_ci,
+        capsize=3,
+        label="Persistent-core breach rate",
+    )
+    plt.xticks(positions, labels, rotation=20, ha="right")
+    plt.ylabel("Rate")
+    plt.title("Ghost Wave synthetic benchmark")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(figure_directory / "benchmark_rates.png", dpi=180)
+    plt.savefig(figure_directory / "benchmark_rates.pdf")
+    plt.close()
+
+    total_cost = [float(row["total_operational_cost_mean"]) for row in summaries]
+    total_cost_ci = [float(row["total_operational_cost_ci95"]) for row in summaries]
+    recovery_cost = [float(row["recovery_downtime_mean"]) for row in summaries]
+    exposure_cost = [float(row["compromise_exposure_cost_mean"]) for row in summaries]
+
+    plt.figure(figsize=(9.0, 4.8))
+    plt.bar(labels, exposure_cost, label="Compromise exposure cost")
+    plt.bar(labels, recovery_cost, bottom=exposure_cost, label="Recovery downtime")
+    plt.errorbar(
+        positions,
+        total_cost,
+        yerr=total_cost_ci,
+        fmt="none",
+        capsize=3,
+    )
+    plt.xticks(rotation=20, ha="right")
+    plt.ylabel("Synthetic operational cost")
+    plt.title("Recovery cost and uncontained-compromise cost")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(figure_directory / "benchmark_costs.png", dpi=180)
+    plt.savefig(figure_directory / "benchmark_costs.pdf")
+    plt.close()
+
+
+def _write_latex_results(output: Path, summaries: list[dict[str, float | str | int]]) -> None:
+    paper_directory = output / "paper"
+    paper_directory.mkdir(parents=True, exist_ok=True)
+    path = paper_directory / "results_generated.tex"
+    lines = [
+        "% Auto-generated by ghost_wave.benchmark. Do not edit manually.",
+        "\\begin{tabular}{lrrrr}",
+        "\\toprule",
+        "Strategy & Shell compromise & Core breach & Total cost & Mean CI \\\\",
+        "\\midrule",
+    ]
+    for row in summaries:
+        lines.append(
+            f"{row['strategy']} & "
+            f"{float(row['shell_compromise_rate_mean']):.3f} & "
+            f"{float(row['core_breached_mean']):.3f} & "
+            f"{float(row['total_operational_cost_mean']):.1f} & "
+            f"{float(row['mean_collapse_index_mean']):.3f} \\\\")
+    lines.extend(["\\bottomrule", "\\end{tabular}"])
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_benchmark(config: BenchmarkConfig) -> tuple[list[TrialResult], list[dict[str, object]]]:
+    results: list[TrialResult] = []
+    for seed_index in range(config.seeds):
+        for trial_index in range(config.trials_per_seed):
+            trial_seed = config.base_seed + seed_index * 1_000_000 + trial_index * 101
+            for strategy in config.strategies:
+                results.append(run_trial(strategy, trial_seed, config.simulation))
+
+    summaries = summarize(results)
+    output = config.output_directory
+    _write_csv(output / "results" / "runs.csv", [asdict(result) for result in results])
+    _write_csv(output / "results" / "summary.csv", summaries)
+    _write_figures(output, summaries)
+    _write_latex_results(output, summaries)
+    return results, summaries
